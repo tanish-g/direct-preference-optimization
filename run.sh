@@ -1,0 +1,1 @@
+python -u train.py model=phi3_mini datasets=[uf] loss=sft loss.beta=0.1 lr=1e-6 exp_name=train_phi3_mini_sft_baseline_1e_6 gradient_accumulation_steps=2 batch_size=32 eval_batch_size=32 trainer=FSDPTrainer sample_during_eval=false model.fsdp_policy_mp=bfloat16 n_epochs=2
