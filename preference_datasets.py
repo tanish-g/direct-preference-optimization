@@ -170,6 +170,8 @@ def get_dataset(name: str, split: str, silent: bool = False, cache_dir: str = No
         data = get_se(split, silent=silent, cache_dir=cache_dir)
     elif name == 'uf':
         data = get_uf(split, silent=silent, cache_dir=cache_dir)
+    elif name == 'rand_uf':
+        data = get_rand_uf(split, silent=silent, cache_dir=cache_dir)
     elif name == 'slac_uf':
         data = get_slac_uf(split, silent=silent, cache_dir=cache_dir)
     elif name == 'base_uf':
@@ -392,15 +394,58 @@ def strings_match_up_to_spaces(str_a: str, str_b: str) -> bool:
                     str_b = str_b[:idx] + str_b[idx + 1:]
  
     return True
- 
- 
-# function for ultrafeed-back dataset
+
 def get_uf(split: str, silent: bool = False, cache_dir: str = None) -> Dict[str, Dict[str, Union[List[Tuple[int, int]], List[str], str]]]:
     """Load the Ultrafeed dataset from Huggingface and convert it to the necessary format.
     """
     print(f'Loading UF dataset ({split} split) from Huggingface...')
     split = split + '_prefs'
+ 
     dataset = datasets.load_dataset('HuggingFaceH4/ultrafeedback_binarized', split=split, cache_dir=cache_dir)
+    
+    def get_chosen_rejected(prompt):
+        chosen = [x for x in prompt["chosen"] if x["role"] == "assistant"][0]["content"]
+        rejected = [x for x in prompt["rejected"] if x["role"] == "assistant"][0]["content"]
+        return chosen, rejected
+ 
+    ####################################################################################################################
+    model_name = "microsoft/Phi-3-mini-4k-instruct"
+    ##############################################TOKENIZER#############################################################
+    tokenizer = transformers.AutoTokenizer.from_pretrained(model_name)
+    ####################################################################################################################
+    ####################################################################################################################
+ 
+    data = defaultdict(lambda: defaultdict(list))
+    for row in tqdm.tqdm(dataset, desc='Processing UF', disable=silent):
+        # prompt = '### Instruction: ' + row['prompt'] + '\n\n### Response:'
+ 
+        prompt = [{"role": "system", "content": "You are a helpful AI assistant."}, {'role': 'user', 'content': row['prompt']}]
+        prompt = tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
+ 
+        chosen, rejected = get_chosen_rejected(row)
+        responses = [' ' + chosen, ' ' + rejected]
+ 
+        n_responses = len(data[prompt]['responses'])
+        data[prompt]['pairs'].append((n_responses, n_responses + 1))
+ 
+        data[prompt]['responses'].extend(responses)
+ 
+    for prompt in data:
+        data[prompt]['sft_target'] = responses[0]
+ 
+    return data
+ 
+# function for ultrafeed-back dataset
+def get_rand_uf(split: str, silent: bool = False, cache_dir: str = None) -> Dict[str, Dict[str, Union[List[Tuple[int, int]], List[str], str]]]:
+    """Load the Ultrafeed dataset from Huggingface and convert it to the necessary format.
+    """
+    print(f'Loading UF dataset ({split} split) from Huggingface...')
+    split = split + '_prefs'
+    
+    if 'train' in split:
+        dataset = datasets.load_dataset('HuggingFaceH4/ultrafeedback_binarized', split=split, cache_dir=cache_dir).shuffle(seed=2024).select(range(21500))
+    else:
+        dataset = datasets.load_dataset('HuggingFaceH4/ultrafeedback_binarized', split=split, cache_dir=cache_dir)
  
     def get_chosen_rejected(prompt):
         chosen = [x for x in prompt["chosen"] if x["role"] == "assistant"][0]["content"]
@@ -438,7 +483,7 @@ def get_slac_uf(split: str, silent: bool = False, cache_dir: str = None) -> Dict
     """Load the Ultrafeed dataset modified using SLAC.
     """
     print(f'Loading UF dataset ({split} split) from Huggingface...')
-    data_path = "/home/azureuser/cloudfiles/code/Users/t-taneegupta/icml/datasets/ours_method_data.json"
+    data_path = "/mnt/azureml/cr/j/694fe47564604d2bb5fa17e72155dbb1/exe/wd/icml/ours_method_data_hallucinate.json"
     dataset = datasets.load_dataset('json', data_files={"train": data_path, "test": data_path}, cache_dir=cache_dir, split=split, download_mode="force_redownload")
  
     # filter out examples where the difference in scores is greater than equal to 1
@@ -481,7 +526,7 @@ def get_base_uf(split: str, silent: bool = False, cache_dir: str = None) -> Dict
     """Load the Ultrafeed dataset modified using SLAC.
     """
     print(f'Loading UF dataset ({split} split) from Huggingface...')
-    data_path = "/home/azureuser/cloudfiles/code/Users/t-taneegupta/icml/datasets/baseline_data.json"
+    data_path = "/mnt/azureml/cr/j/694fe47564604d2bb5fa17e72155dbb1/exe/wd/icml/baseline_data.json"
     dataset = datasets.load_dataset('json', data_files={"train": data_path, "test": data_path}, cache_dir=cache_dir, split=split, download_mode="force_redownload")
  
     # filter out examples where the difference in scores is greater than equal to 1
