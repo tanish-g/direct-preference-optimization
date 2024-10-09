@@ -3,3 +3,6 @@ pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https
 pip install -U transformers
 pip install -U datasets
 sudo mount -o size=64097152k -o nr_inodes=1000000 -o noatime, nodiratime -o remount /dev/shm
+pip install -U deepspeed
+pip install -U accelerate
+pip install -U flash_attn
